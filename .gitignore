@@ -27,3 +27,16 @@ outputs/*
 Thumbs.db
 .vscode/
 .idea/
+
+# Prepared/private feature datasets
+data/prepared/*
+
+# Keep prepared folder structure
+!data/prepared/.gitkeep
+
+# Temporary backup scripts
+src/*_backup.py
+
+# Python cache files
+__pycache__/
+*.py[cod]

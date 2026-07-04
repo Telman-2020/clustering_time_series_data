@@ -1,300 +1,382 @@
+from __future__ import annotations
+
+import argparse
 from pathlib import Path
-import re
 
-import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib.lines import Line2D
+import numpy as np
+import pandas as pd
 
-
-# ============================================================
-# Project paths
-# ============================================================
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
-DATASETS = {
-    "KMeans": {
-        "path": ROOT_DIR / "data" / "processed" / "clustered_time_series_jobs_kmeans.csv",
-        "fallback_path": ROOT_DIR / "data" / "processed" / "clustered_time_series_jobs.csv",
-        "output_dir": ROOT_DIR / "outputs" / "kmeans_time_series_plots",
-        "title_prefix": "KMeans",
-        "noise_cluster": None,
-    },
-    "HDBSCAN merged to 7 clusters": {
-        "path": ROOT_DIR / "data" / "processed" / "clustered_time_series_jobs_hdbscan_merged.csv",
-        "fallback_path": ROOT_DIR / "data" / "processed" / "clustered_time_series_jobs_hdbscan.csv",
-        "output_dir": ROOT_DIR / "outputs" / "hdbscan_merged_time_series_plots",
-        "title_prefix": "HDBSCAN merged to 7 clusters",
-        "noise_cluster": -1,
-    },
-}
+PROCESSED_DATA_DIR = ROOT_DIR / "data" / "processed"
+FIGURE_OUTPUT_DIR = ROOT_DIR / "outputs" / "figures"
 
-FEATURES_USED_FOR_CLUSTERING = [
-    "GX",
-    "GY",
-    "GZ",
-    "BX",
-    "BY",
-    "BZ",
-    "CC_RPM",
-    "RPM_LT",
-    "RPM_UT",
-    "RX",
-    "RY",
+KMEANS_DATA_PATH = (
+    PROCESSED_DATA_DIR
+    / "kmeans_clustered_trip_features.parquet"
+)
+
+HDBSCAN_DATA_PATH = (
+    PROCESSED_DATA_DIR
+    / "hdbscan_clustered_trip_features.parquet"
+)
+
+
+DEFAULT_FEATURES = [
+    "gx",
+    "gy",
+    "gz",
+    "bx",
+    "by",
+    "bz",
+    "pipe_rotation",
+    "flow_rotation_lower",
+    "flow_rotation_upper",
 ]
 
 
-# ============================================================
-# Helpers
-# ============================================================
-
-def extract_job_number_from_source_file(source_file: str) -> int:
+def load_clustered_data(
+    file_path: Path,
+) -> pd.DataFrame:
     """
-    Extract job number from names such as:
-
-    time_series_job1.csv
-    time_series_job2.csv
+    Load a clustered Parquet dataset.
     """
-    match = re.search(r"job(\d+)", str(source_file).lower())
-
-    if match:
-        return int(match.group(1))
-
-    return -1
-
-
-def load_clustered_data(path: Path, fallback_path: Path, method_name: str) -> pd.DataFrame:
-    """
-    Load clustered data for one method.
-    """
-    selected_path = path
-
-    if not selected_path.exists() and fallback_path.exists():
-        selected_path = fallback_path
-
-    if not selected_path.exists():
+    if not file_path.exists():
         raise FileNotFoundError(
-            f"Could not find clustered data for {method_name}.\n"
-            f"Expected:\n{path}\n\n"
-            "Run this first:\npython src/cluster_time_series_methods.py"
+            f"Clustered dataset was not found:\n"
+            f"{file_path}\n\n"
+            "Run this command first:\n"
+            "python src\\cluster_time_series_methods.py"
         )
 
-    print(f"Loading {method_name}: {selected_path}")
-    df = pd.read_csv(selected_path)
+    data = pd.read_parquet(
+        file_path,
+        engine="pyarrow",
+    )
 
-    required_columns = FEATURES_USED_FOR_CLUSTERING + ["cluster"]
-    missing_columns = [col for col in required_columns if col not in df.columns]
+    if data.empty:
+        raise ValueError(
+            f"The dataset is empty: {file_path}"
+        )
 
-    if missing_columns:
-        raise ValueError(f"{method_name} data is missing required columns: {missing_columns}")
+    if "cluster" not in data.columns:
+        raise ValueError(
+            f"The cluster column is missing from: {file_path}"
+        )
 
-    if "job_number" not in df.columns:
-        if "source_file" not in df.columns:
-            raise ValueError(
-                f"{method_name} data does not contain 'job_number' or 'source_file'."
-            )
+    if "time" in data.columns:
+        data["time"] = pd.to_datetime(
+            data["time"],
+            errors="coerce",
+        )
 
-        df["job_number"] = df["source_file"].apply(extract_job_number_from_source_file)
-
-    if "date_time_pd" in df.columns:
-        df["date_time_pd"] = pd.to_datetime(df["date_time_pd"], errors="coerce")
-
-    sort_columns = ["job_number"]
-
-    if "date_time_pd" in df.columns and df["date_time_pd"].notna().sum() > 0:
-        sort_columns.append("date_time_pd")
-    elif "MD" in df.columns:
-        sort_columns.append("MD")
-
-    df = df.sort_values(sort_columns).copy()
-    df["row_in_job"] = df.groupby("job_number").cumcount()
-
-    return df
+    return data
 
 
-def choose_x_axis(job_df: pd.DataFrame):
+def filter_trip(
+    data: pd.DataFrame,
+    trip_id: int | None,
+) -> pd.DataFrame:
     """
-    Choose best x-axis:
-    1. date_time_pd
-    2. MD
-    3. row number inside job
+    Filter one trip or keep all trips.
     """
-    if "date_time_pd" in job_df.columns and job_df["date_time_pd"].notna().sum() > 0:
-        return job_df["date_time_pd"], "date_time_pd"
+    if trip_id is None:
+        return data.copy()
 
-    if "MD" in job_df.columns:
-        return job_df["MD"], "MD"
+    filtered = data[
+        data["trip_id"] == int(trip_id)
+    ].copy()
 
-    return job_df["row_in_job"], "row_in_job"
+    if filtered.empty:
+        raise ValueError(
+            f"No rows were found for trip {trip_id}."
+        )
+
+    return filtered
 
 
-def create_cluster_color_mapping(cluster_values: list[int], noise_cluster: int | None = None) -> dict[int, object]:
+def downsample_data(
+    data: pd.DataFrame,
+    maximum_points: int,
+) -> pd.DataFrame:
     """
-    Create color mapping for clusters.
-
-    For HDBSCAN, noise cluster -1 is shown in black.
+    Uniformly downsample rows for faster plotting.
     """
-    cmap = plt.colormaps.get_cmap("tab20")
+    if (
+        maximum_points <= 0
+        or len(data) <= maximum_points
+    ):
+        return data
 
-    cluster_to_color = {}
+    positions = np.linspace(
+        0,
+        len(data) - 1,
+        maximum_points,
+    ).astype(int)
 
-    normal_clusters = cluster_values
-
-    if noise_cluster is not None and noise_cluster in cluster_values:
-        cluster_to_color[noise_cluster] = "black"
-        normal_clusters = [cluster for cluster in cluster_values if cluster != noise_cluster]
-
-    for i, cluster in enumerate(normal_clusters):
-        cluster_to_color[cluster] = cmap(i % 20)
-
-    return cluster_to_color
+    return data.iloc[positions].copy()
 
 
-def cluster_label(cluster: int, noise_cluster: int | None = None) -> str:
+def cluster_display_name(
+    method: str,
+    cluster: int,
+) -> str:
     """
-    Human-readable cluster label.
+    Return a readable cluster label.
     """
-    if noise_cluster is not None and cluster == noise_cluster:
-        return "Noise / Outlier (-1)"
+    if method == "hdbscan" and cluster == -1:
+        return "Anomaly / Noise"
 
     return f"Cluster {cluster}"
 
 
-def plot_one_job(
-    job_df: pd.DataFrame,
-    job_number: int,
-    cluster_values: list[int],
-    method_name: str,
-    output_dir: Path,
-    noise_cluster: int | None = None,
-) -> None:
+def validate_features(
+    data: pd.DataFrame,
+    requested_features: list[str],
+) -> list[str]:
     """
-    Create one stacked plot figure for one job.
-    Each subplot shows one feature.
-    Points are coloured by cluster.
+    Keep only numeric features present in the dataset.
     """
-    x, x_label = choose_x_axis(job_df)
-    cluster_to_color = create_cluster_color_mapping(cluster_values, noise_cluster=noise_cluster)
+    valid_features = [
+        feature
+        for feature in requested_features
+        if feature in data.columns
+        and pd.api.types.is_numeric_dtype(
+            data[feature]
+        )
+    ]
 
-    fig, axes = plt.subplots(
-        nrows=len(FEATURES_USED_FOR_CLUSTERING),
+    missing_features = [
+        feature
+        for feature in requested_features
+        if feature not in valid_features
+    ]
+
+    if missing_features:
+        print(
+            "Skipping unavailable features:",
+            missing_features,
+        )
+
+    if not valid_features:
+        raise ValueError(
+            "None of the requested plotting features are available."
+        )
+
+    return valid_features
+
+
+def plot_clustered_features(
+    data: pd.DataFrame,
+    *,
+    method: str,
+    features: list[str],
+    x_axis: str,
+    trip_id: int | None,
+    maximum_points: int,
+) -> Path:
+    """
+    Plot multiple time-series features coloured by cluster.
+    """
+    if x_axis not in data.columns:
+        raise ValueError(
+            f"X-axis column is unavailable: {x_axis}"
+        )
+
+    data = data.sort_values(
+        ["trip_id", x_axis],
+        kind="stable",
+    )
+
+    data = downsample_data(
+        data,
+        maximum_points,
+    )
+
+    clusters = sorted(
+        int(value)
+        for value in data[
+            "cluster"
+        ].dropna().unique()
+    )
+
+    figure, axes = plt.subplots(
+        nrows=len(features),
         ncols=1,
-        figsize=(18, 2.4 * len(FEATURES_USED_FOR_CLUSTERING)),
+        figsize=(
+            16,
+            max(4, 3.2 * len(features)),
+        ),
         sharex=True,
     )
 
-    for ax, feature in zip(axes, FEATURES_USED_FOR_CLUSTERING):
-        for cluster in cluster_values:
-            mask = job_df["cluster"] == cluster
+    if len(features) == 1:
+        axes = [axes]
 
-            ax.scatter(
-                x[mask],
-                job_df.loc[mask, feature],
+    for axis, feature in zip(
+        axes,
+        features,
+    ):
+        for cluster in clusters:
+            cluster_data = data[
+                data["cluster"] == cluster
+            ]
+
+            axis.scatter(
+                cluster_data[x_axis],
+                cluster_data[feature],
                 s=8,
-                alpha=0.75,
-                color=cluster_to_color[cluster],
+                alpha=0.7,
+                label=cluster_display_name(
+                    method,
+                    cluster,
+                ),
             )
 
-        ax.set_ylabel(feature, fontsize=9)
-        ax.grid(True, alpha=0.3)
-
-    axes[-1].set_xlabel(x_label)
-
-    legend_elements = [
-        Line2D(
-            [0],
-            [0],
-            marker="o",
-            linestyle="",
-            label=cluster_label(cluster, noise_cluster=noise_cluster),
-            markerfacecolor=cluster_to_color[cluster],
-            markeredgecolor=cluster_to_color[cluster],
-            markersize=7,
-        )
-        for cluster in cluster_values
-    ]
-
-    fig.legend(
-        handles=legend_elements,
-        loc="upper center",
-        ncol=min(len(cluster_values), 7),
-        bbox_to_anchor=(0.5, 0.995),
-        fontsize=8,
-    )
-
-    fig.suptitle(
-        f"Job {job_number} - {method_name} Sensor Time-Series Colored by Cluster",
-        fontsize=14,
-        y=0.999,
-    )
-
-    fig.tight_layout(rect=[0, 0, 1, 0.975])
-
-    safe_method_name = (
-        method_name.lower()
-        .replace(" ", "_")
-        .replace("/", "_")
-        .replace("-", "_")
-    )
-
-    output_file = output_dir / f"job_{job_number}_{safe_method_name}_time_series.png"
-    fig.savefig(output_file, dpi=200, bbox_inches="tight")
-    plt.close(fig)
-
-    print(f"Saved: {output_file}")
-
-
-def plot_method(method_name: str, config: dict) -> None:
-    """
-    Plot all jobs for one clustering method.
-    """
-    output_dir = config["output_dir"]
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    df = load_clustered_data(
-        path=config["path"],
-        fallback_path=config["fallback_path"],
-        method_name=method_name,
-    )
-
-    cluster_values = sorted(int(c) for c in df["cluster"].dropna().unique())
-    job_numbers = sorted(int(j) for j in df["job_number"].dropna().unique())
-
-    print(f"\n{method_name}")
-    print("Detected clusters:", cluster_values)
-    print("Detected job numbers:", job_numbers)
-
-    for job_number in job_numbers:
-        job_df = df[df["job_number"] == job_number].copy()
-
-        if job_df.empty:
-            continue
-
-        print(f"Plotting {method_name}, job {job_number}, rows={len(job_df)}")
-
-        plot_one_job(
-            job_df=job_df,
-            job_number=job_number,
-            cluster_values=cluster_values,
-            method_name=config["title_prefix"],
-            output_dir=output_dir,
-            noise_cluster=config["noise_cluster"],
+        axis.set_ylabel(feature)
+        axis.grid(
+            visible=True,
+            alpha=0.25,
         )
 
-    print(f"{method_name} plots saved to: {output_dir}")
+    axes[-1].set_xlabel(x_axis)
+
+    trip_text = (
+        f"Trip {trip_id}"
+        if trip_id is not None
+        else "All trips"
+    )
+
+    figure.suptitle(
+        f"{method.upper()} clustered sensor features — "
+        f"{trip_text}"
+    )
+
+    handles, labels = axes[0].get_legend_handles_labels()
+
+    figure.legend(
+        handles,
+        labels,
+        loc="center right",
+        title="Cluster",
+    )
+
+    figure.tight_layout(
+        rect=(0, 0, 0.88, 0.97)
+    )
+
+    FIGURE_OUTPUT_DIR.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    trip_suffix = (
+        f"trip_{trip_id}"
+        if trip_id is not None
+        else "all_trips"
+    )
+
+    output_path = (
+        FIGURE_OUTPUT_DIR
+        / f"{method}_{trip_suffix}_{x_axis}.png"
+    )
+
+    figure.savefig(
+        output_path,
+        dpi=160,
+        bbox_inches="tight",
+    )
+
+    plt.close(figure)
+
+    return output_path
 
 
-# ============================================================
-# Main
-# ============================================================
+def parse_arguments() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Plot KMeans and HDBSCAN clustered "
+            "time-series features."
+        )
+    )
+
+    parser.add_argument(
+        "--trip",
+        type=int,
+        default=None,
+        help=(
+            "Trip number to plot. "
+            "Omit to plot all trips."
+        ),
+    )
+
+    parser.add_argument(
+        "--x-axis",
+        default="depth",
+        choices=[
+            "row_in_trip",
+            "depth",
+            "time",
+            "ground_depth",
+            "ground_time",
+        ],
+    )
+
+    parser.add_argument(
+        "--features",
+        nargs="+",
+        default=DEFAULT_FEATURES,
+    )
+
+    parser.add_argument(
+        "--maximum-points",
+        type=int,
+        default=12000,
+    )
+
+    return parser.parse_args()
+
 
 def main() -> None:
-    print("Creating KMeans and HDBSCAN time-series plots...")
+    arguments = parse_arguments()
 
-    for method_name, config in DATASETS.items():
-        plot_method(method_name, config)
+    datasets = {
+        "kmeans": load_clustered_data(
+            KMEANS_DATA_PATH
+        ),
+        "hdbscan": load_clustered_data(
+            HDBSCAN_DATA_PATH
+        ),
+    }
 
-    print("\nDone.")
+    print("Creating clustering figures...")
+
+    for method, data in datasets.items():
+        data = filter_trip(
+            data,
+            arguments.trip,
+        )
+
+        features = validate_features(
+            data,
+            arguments.features,
+        )
+
+        output_path = plot_clustered_features(
+            data,
+            method=method,
+            features=features,
+            x_axis=arguments.x_axis,
+            trip_id=arguments.trip,
+            maximum_points=arguments.maximum_points,
+        )
+
+        print(
+            f"{method.upper()} figure saved to:\n"
+            f"{output_path}\n"
+        )
 
 
 if __name__ == "__main__":
