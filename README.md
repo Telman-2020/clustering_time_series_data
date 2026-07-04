@@ -1,8 +1,8 @@
 # Multivariate Time-Series Behaviour Segmentation
 
-**Telman Maghrebi** |
-Senior Data Scientist |
-Contact: [telman_mgh@yahoo.com](mailto:telman_mgh@yahoo.com)
+**Telman Maghrebi**<br>
+Senior Data Scientist<br>
+Contact: telman_mgh@yahoo.com
 
 ## Overview
 
@@ -11,100 +11,121 @@ This project is a proof of concept for identifying behavioural and operational r
 1. **KMeans**
 2. **HDBSCAN**
 
-The clustering pipeline consumes a prepared Parquet feature dataset containing multiple time-sequenced trip recordings.
+The repository is designed as a **public demo version** of the workflow. It uses a **synthetic multi-trip dataset** that mimics multivariate sensor behaviour across different operational regimes. The synthetic data allows users to run the full pipeline end to end without access to private industrial data.
 
-The main objective is to separate recurring operating behaviours using acceleration, magnetic-field, rotational, pipe-rotation, flow-induced rotation, orientation, shock, vibration, depth, and related operational measurements.
+The main objective is to segment time-series trip data into meaningful behavioural regimes using accelerometr, magnetometre, gyroscope, pipe-rotation, flow-induced rotation, shock, vibration, spatial, temporal, and related operational sensor measurements.
 
 The resulting regime labels can support:
 
-* Behaviour segmentation
-* Operating-state identification
-* Noise and anomaly isolation
-* Regime-specific denoising
-* Control-engineering decisions
-* Trip-level behavioural comparison
-* Downstream machine-learning pipelines
+- Behaviour segmentation
+- Operating-state identification
+- Noise and anomaly isolation
+- Regime-specific denoising
+- Control-engineering decisions
+- Trip-level behavioural comparison
+- Downstream machine-learning workflows
+
+---
 
 ## Problem Statement
 
-Industrial time-series datasets commonly contain several operating behaviours within the same continuous recording.
+Industrial time-series data often contains multiple operating behaviours within the same trip or sequence.
 
 A single trip may include:
 
-* Stable motion
-* Changing motion
-* Low- and high-vibration periods
-* Rotational transitions
-* Flow-driven changes
-* Sensor disturbances
-* Short abnormal intervals
-* Repeated operating patterns
+- Stationary intervals
+- Stable rotation
+- High rotation
+- Flow-dominant behaviour
+- Sliding or transitional behaviour
+- High-vibration intervals
+- Irregular disturbance or anomaly periods
 
-Processing the entire recording as one homogeneous signal can mix distinct operating conditions together. This can reduce the effectiveness of filtering, denoising, monitoring, control logic, and downstream models.
+If the entire trip is treated as a single homogeneous signal, these regimes become mixed together. That makes denoising, monitoring, filtering, and control logic less effective.
 
-This project segments each trip into more consistent behavioural regimes using relationships between multiple sensor and operational channels.
+This project aims to segment each trip into more coherent behavioural regimes so that downstream analysis can operate on more consistent sections of data.
 
-## Project Architecture
+---
 
-The main project workflow is:
+## Public Demo Dataset
+
+This repository includes a **synthetic demonstration dataset** located in:
 
 ```text
+data/demo/time_series_jobs/
+```
+
+The demo dataset contains **four synthetic trip recordings** with the same schema expected by the pipeline.
+
+Each trip contains multivariate time-series signals representing:
+
+- Triaxial accelerometer measurements
+- Triaxial magnetometer measurements
+- Rotational measurements
+- Pipe rotation
+- Flow-induced rotation
+- Shock and vibration
+- Depth and orientation-related fields
+
+The synthetic dataset was intentionally designed to contain several operating regimes, plus short anomaly/disturbance periods, so that clustering behaviour can be visually inspected and compared.
+
+---
+
+## Project Workflow
+
+```text
+Synthetic demo CSV files
+            ↓
 Prepared Parquet feature dataset
-                ↓
+            ↓
 Dataset validation
-                ↓
+            ↓
 Feature selection
-                ↓
+            ↓
 Finite-value row selection
-                ↓
+            ↓
 Robust quantile clipping
-                ↓
+            ↓
 Standard scaling
-                ↓
+            ↓
 KMeans clustering
-                ↓
+            ↓
 HDBSCAN clustering
-                ↓
+            ↓
 Behavioural-regime comparison
-                ↓
-Anomaly/noise inspection
-                ↓
+            ↓
 Static and interactive visualisation
 ```
 
-The clustering and dashboard applications do not read raw CSV files directly. They use:
+The pipeline first converts the synthetic CSV files into a prepared Parquet dataset, and then runs both clustering methods on the same selected feature matrix.
 
-```text
-data/prepared/trip_features.parquet
-```
-
-Raw datasets, prepared Parquet files, processed outputs, figures, and other generated files are excluded from Git through `.gitignore`.
+---
 
 ## Prepared Dataset
 
-The prepared Parquet dataset contains:
-
-* Four trip recordings
-* Time and depth sequence information
-* Sensor and operational features
-* A trip identifier
-* A sequence number within each trip
-* Derived horizontal-orientation measurements
-* Derived circular orientation differences
-
-The expected prepared-data path is:
+The prepared Parquet dataset is written to:
 
 ```text
 data/prepared/trip_features.parquet
 ```
 
-The prepared dataset is validated by:
+It contains:
+
+- Four trip recordings
+- Time and depth sequence information
+- Sensor and operational features
+- A trip identifier
+- A row index within each trip
+- Raw horizontal-orientation estimates
+- Circular orientation-difference features
+
+The validation and loading logic is implemented in:
 
 ```text
 src/prepared_data.py
 ```
 
-This module checks that the required fields exist and provides the default clustering feature list.
+---
 
 ## Sensor and Operational Features
 
@@ -120,11 +141,10 @@ gz
 
 They help describe:
 
-* Motion intensity
-* Directional changes
-* Vibration behaviour
-* Impacts
-* Changes in lateral and vertical movement
+- Motion intensity
+- Vibration behaviour
+- Directional changes
+- Mechanical response patterns
 
 ### Triaxial Magnetic Field
 
@@ -138,13 +158,12 @@ bz
 
 They help describe:
 
-* Directional behaviour
-* Horizontal-orientation changes
-* Magnetic disturbances
-* Rotational state
-* Positional alignment changes
+- Magnetic orientation behaviour
+- Horizontal-orientation changes
+- Rotational state differences
+- Disturbance patterns
 
-### Sesor Rotational Chassis Channels
+### Rotational Channels
 
 The rotational channels include:
 
@@ -153,16 +172,15 @@ rx
 ry
 ```
 
-They help identify:
+These help identify:
 
-* Rotational transitions
-* Stable and unstable rotational behaviour
-* Directional movement changes
-* Differences between operating states
+- Rotational transitions
+- Stable and unstable operating regimes
+- Sequence-specific dynamic behaviour
 
 ### Pipe Rotation
 
-The primary pipe-rotation feature is:
+The main pipe-rotation channel is:
 
 ```text
 pipe_rotation
@@ -170,11 +188,10 @@ pipe_rotation
 
 It helps identify:
 
-* Stationary periods
-* Low-rotation regimes
-* High-rotation regimes
-* Rotational transitions
-* Operating-state changes
+- Stationary periods
+- Low-rotation behaviour
+- High-rotation behaviour
+- Rotational transitions
 
 ### Flow-Induced Rotation
 
@@ -185,16 +202,15 @@ flow_rotation_lower
 flow_rotation_upper
 ```
 
-These measurements can help distinguish:
+These measurements help distinguish:
 
-* Flow-driven operating regimes
-* Mechanical rotation from flow-related rotation
-* Stable flow behaviour
-* Irregular flow-induced movement
+- Flow-driven regimes
+- Mechanical rotation from flow-driven rotation
+- Stable versus unstable flow behaviour
 
 ### Shock and Vibration
 
-The available shock and vibration features include:
+The available features include:
 
 ```text
 axial_shock_peak
@@ -203,19 +219,16 @@ radial_shock_peak
 radial_shock_rms
 ```
 
-These features help identify:
+These help identify:
 
-* High-impact events
-* Mechanical instability
-* Sustained vibration
-* Sudden operating changes
-* Noisy or abnormal regimes
-
-Some features may have lower sampling coverage than the main sensor channels. The pipeline does not interpolate or fill missing measurements. A row is eligible for clustering only when all currently selected model features contain valid finite values.
+- High-impact events
+- Sustained vibration
+- Mechanical instability
+- Potential disturbance or anomaly intervals
 
 ### Depth and Orientation
 
-Depth and orientation-related fields include:
+The prepared dataset also contains depth- and orientation-related fields, including:
 
 ```text
 depth
@@ -230,11 +243,13 @@ azim_raw
 horizontal_orientation_abs_difference
 ```
 
-These measurements provide spatial and directional context for each trip.
+These provide spatial and directional context for each trip.
+
+---
 
 ## Default Clustering Features
 
-By default, both clustering algorithms use the same features:
+By default, both clustering algorithms use the same feature set:
 
 ```text
 gx
@@ -250,70 +265,95 @@ flow_rotation_lower
 flow_rotation_upper
 ```
 
-Using the same eligible rows and scaled feature matrix enables a fairer comparison between KMeans and HDBSCAN.
+Using the same selected rows and scaled feature matrix makes the comparison between KMeans and HDBSCAN more consistent.
 
-Additional numeric features can be selected from the dashboard.
+---
 
-## Feature Preparation
+## Shared Feature Preparation
 
-The shared model preparation performs the following operations:
+The modelling pipeline performs the following shared preparation steps:
 
-1. Confirms that the selected features exist.
-2. Converts selected features to numeric values.
-3. Replaces infinite values with missing values.
-4. Excludes rows that are missing any selected feature.
-5. Clips extreme values using feature-level quantiles.
-6. Standardises the selected features using `StandardScaler`.
+1. Confirms that the selected features exist
+2. Converts selected features to numeric values
+3. Replaces infinite values with missing values
+4. Excludes rows that are missing any selected feature
+5. Clips extreme values using feature-level quantiles
+6. Standardises the selected features using `StandardScaler`
 
-The pipeline intentionally performs no:
+The workflow intentionally performs **no**:
 
-* Linear interpolation
-* Forward filling
-* Backward filling
-* Median imputation
-* Synthetic replacement of missing sensor measurements
+- Linear interpolation
+- Forward filling
+- Backward filling
+- Median imputation
+- Synthetic filling of missing values during clustering
+
+This helps preserve the original behaviour of the dataset seen by the clustering algorithms.
+
+---
 
 ## KMeans
 
 KMeans is a centroid-based clustering algorithm.
 
-It divides the feature space into a predefined number of clusters. Each observation is assigned to its nearest cluster centre.
+It partitions the feature space into a predefined number of clusters by minimising the within-cluster distance to cluster centroids.
 
 ### Main Parameters
 
-* `n_clusters`: number of clusters
-* `max_iter`: maximum number of optimisation iterations
-* `tolerance`: convergence tolerance
-* `random_state`: reproducible initialisation seed
-* `outlier_quantile`: cluster-distance threshold for possible outliers
+- `n_clusters`
+- `max_iter`
+- `tolerance`
+- `random_state`
+- `outlier_quantile`
 
 ### Strengths
 
-* Fast and widely understood
-* Easy to reproduce
-* Suitable as a baseline model
-* Produces a fixed number of groups
-* Works well for compact, similarly scaled clusters
+- Fast
+- Easy to reproduce
+- Strong baseline clustering method
+- Useful when clusters are compact and roughly separable
 
 ### Limitations
 
-* The cluster count must be selected in advance
-* Every observation is assigned to a cluster
-* It does not naturally create a separate noise class
-* It can be sensitive to outliers
-* Irregularly shaped regimes may be represented poorly
+- Requires the number of clusters to be chosen in advance
+- Assigns every point to a cluster
+- Does not natively produce a noise class
+- Assumes roughly compact centroid-based structure
+- Does not model temporal continuity or sequence order
 
-### KMeans Outlier Flag
+---
 
-KMeans does not natively detect noise.
+## Why KMeans Struggles on Behavioural Time-Series Segmentation
 
-This project calculates the distance between each observation and its assigned centroid. Observations above the selected distance quantile are flagged as:
+KMeans works in **feature space**, not in **time-sequence space**.
 
-```text
-possible_outlier
-```
+This means it groups rows that have similar values, even if they come from very different positions in the trip. For behavioural time-series segmentation, this creates an important limitation:
 
-This flag is a distance-based diagnostic and is not a separate KMeans cluster.
+- KMeans does **not** know whether two points are adjacent in time
+- KMeans does **not** explicitly preserve contiguous behavioural segments
+- KMeans may split one real behavioural regime into several clusters if the values vary in magnitude
+- KMeans may merge time-distant observations into the same cluster simply because their feature values are numerically similar
+
+In other words, KMeans tends to divide the trip according to **instantaneous value similarity**, not according to **continuous behavioural segments**.
+
+For sequence segmentation, this often leads to:
+
+- Rapid switching between cluster labels
+- Fragmented segments
+- Limited temporal coherence
+- Poor anomaly isolation
+- Clusters that reflect amplitude differences more than regime continuity
+
+### Example from the Synthetic Trip 1
+
+For one synthetic trip, the clustering outputs showed:
+
+- **KMeans cluster-label transitions:** `3,108`
+- **HDBSCAN cluster-label transitions:** `263`
+
+This large difference illustrates that KMeans creates much more fragmented sequence labelling, while HDBSCAN tends to recover more coherent behavioural regimes with clearer segment continuity.
+
+---
 
 ## HDBSCAN
 
@@ -335,40 +375,58 @@ Anomaly / Noise
 
 ### Main Parameters
 
-* `min_cluster_size`: minimum size of a stable cluster
-* `min_samples`: controls the conservativeness of noise detection
-* `metric`: distance metric
-* `cluster_selection_method`: broader EOM or finer leaf selection
-* `cluster_selection_epsilon`: optional nearby-cluster merging threshold
-* `target_total_labels`: dashboard comparison-oriented displayed label count
+- `min_cluster_size`
+- `min_samples`
+- `metric`
+- `cluster_selection_method`
+- `cluster_selection_epsilon`
+- `target_total_labels`
 
 ### Strengths
 
-* Does not require a fixed native cluster count
-* Supports irregular cluster shapes
-* Naturally identifies noise
-* Can represent changing local density
-* Useful for unstable or sparse operating behaviour
+- Does not require a fixed native number of clusters
+- Can represent irregular cluster shapes
+- Naturally identifies noise
+- More suitable for behavioural regimes with different local densities
+- Often gives more coherent regime segmentation than KMeans
 
 ### Limitations
 
-* Sensitive to parameter selection
-* Can classify a large proportion of observations as noise
-* Density separation becomes more difficult in high dimensions
-* Cluster meaning requires engineering interpretation
-* Displayed target labels involve post-processing and are not native HDBSCAN outputs
+- Sensitive to hyperparameter selection
+- Can classify many points as noise
+- Results still require engineering interpretation
+- Displayed cluster count in the dashboard may involve merging or splitting for comparison purposes
 
-## HDBSCAN Displayed Regimes
+---
 
-The project preserves the original HDBSCAN labels in:
+## Trip 1 Example — KMeans vs HDBSCAN
 
-```text
-hdbscan_original_cluster
-```
+The following example uses **Trip 1** from the synthetic demo dataset.
 
-For dashboard comparison, native HDBSCAN clusters may be merged or split to reach a selected displayed regime count.
+### KMeans on Trip 1
 
-The native noise label `-1` is always preserved and is never converted into a normal behavioural regime.
+KMeans tends to mix colours across long stretches of similar operating values. This indicates that it is largely clustering rows by **value similarity**, not by **continuous behavioural segments**.
+
+![Trip 1 KMeans segmentation](docs/images/trip1_kmeans_segmentation.png)
+
+### HDBSCAN on Trip 1
+
+HDBSCAN produces fewer, more coherent behavioural regions and also isolates sparse or unstable observations as **Anomaly / Noise**.
+
+![Trip 1 HDBSCAN segmentation](docs/images/trip1_hdbscan_segmentation.png)
+
+### Technical Observation
+
+For behavioural time-series segmentation, HDBSCAN is often more suitable than KMeans because:
+
+- it can model different density regimes
+- it preserves a natural noise class
+- it tends to create more contiguous behavioural segments
+- it is less likely to fragment the trip purely based on value differences
+
+KMeans remains useful as a fast baseline, but it should not be assumed to represent true sequence-level behavioural segmentation.
+
+---
 
 ## Project Structure
 
@@ -376,12 +434,22 @@ The native noise label `-1` is always preserved and is never converted into a no
 clustering_time_series_data/
 │
 ├── data/
-│   ├── raw/
-│   │   └── .gitkeep
+│   ├── demo/
+│   │   ├── .gitkeep
+│   │   └── time_series_jobs/
+│   │       ├── time_series_job1.csv
+│   │       ├── time_series_job2.csv
+│   │       ├── time_series_job3.csv
+│   │       └── time_series_job4.csv
 │   ├── prepared/
 │   │   └── .gitkeep
 │   └── processed/
 │       └── .gitkeep
+│
+├── docs/
+│   └── images/
+│       ├── trip1_kmeans_segmentation.png
+│       └── trip1_hdbscan_segmentation.png
 │
 ├── outputs/
 │   └── .gitkeep
@@ -399,25 +467,24 @@ clustering_time_series_data/
 └── requirements.txt
 ```
 
+---
+
 ## Main Python Modules
 
 ### `prepare_parquet.py`
 
-Creates the prepared Parquet dataset from locally available trip CSV files.
+Creates the prepared Parquet dataset from the synthetic demo CSV files.
 
 It:
 
-* Combines the trip recordings
-* Standardises column names
-* Renames source fields
-* Converts expected numeric features
-* Shifts timestamps to a common reference date
-* Calculates raw horizontal orientation
-* Calculates circular orientation difference
-* Adds trip and within-trip sequence identifiers
-* Writes the prepared Parquet file
-
-Raw input files are not included in the repository.
+- Combines the four trip recordings
+- Standardises and renames fields
+- Converts expected numeric features
+- Shifts timestamps to a common reference date
+- Calculates raw horizontal orientation
+- Calculates circular orientation differences
+- Adds trip and within-trip sequence identifiers
+- Writes the prepared Parquet file
 
 ### `prepared_data.py`
 
@@ -425,38 +492,37 @@ Provides reusable prepared-data loading and validation.
 
 It:
 
-* Loads the Parquet dataset
-* Validates required fields
-* Parses datetime fields
-* Sorts rows by trip and sequence
-* Returns available numeric clustering features
-* Defines the default clustering inputs
+- Loads the Parquet dataset
+- Validates required fields
+- Parses datetime fields
+- Sorts rows by trip and sequence
+- Returns available numeric clustering features
+- Defines the default clustering inputs
 
 ### `cluster_time_series_methods.py`
 
-Runs the complete clustering workflow.
+Runs the main clustering workflow.
 
 It:
 
-* Loads the prepared Parquet dataset
-* Creates the shared feature matrix
-* Runs KMeans
-* Runs HDBSCAN
-* Creates cluster summaries
-* Saves processed Parquet outputs
-* Saves CSV comparison reports
+- Loads the prepared Parquet dataset
+- Creates the shared feature matrix
+- Runs KMeans
+- Runs HDBSCAN
+- Creates summary outputs
+- Saves processed datasets and reports
 
 ### `plot_kmeans_hdbscan_time_series.py`
 
-Creates static Matplotlib figures for both methods.
+Creates static comparison figures for both methods.
 
 It supports:
 
-* One selected trip or all trips
-* Configurable x-axis
-* Configurable plotted features
-* Point downsampling
-* PNG output
+- One selected trip or all trips
+- Configurable x-axis
+- Configurable plotted features
+- Point downsampling
+- PNG output
 
 ### `dash_cluster_app.py`
 
@@ -464,22 +530,23 @@ Provides the interactive Dash application.
 
 It supports:
 
-* Side-by-side KMeans and HDBSCAN plots
-* Trip filtering
-* X-axis selection
-* Model feature selection
-* Plot feature selection
-* KMeans parameter controls
-* HDBSCAN parameter controls
-* Cluster filtering
-* Cluster summary tables
-* Anomaly/noise highlighting
-* Interactive model reruns
-* Shared feature preparation for both algorithms
+- Side-by-side KMeans and HDBSCAN plots
+- Trip filtering
+- X-axis selection
+- Model feature selection
+- Plot feature selection
+- KMeans hyperparameter tuning
+- HDBSCAN hyperparameter tuning
+- Cluster filtering
+- Summary tables
+- Anomaly/noise highlighting
+- Interactive model reruns
+
+---
 
 ## Installation
 
-Create and activate a Python virtual environment.
+Create and activate a virtual environment.
 
 On Windows PowerShell:
 
@@ -488,45 +555,45 @@ python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
-Install the dependencies:
+Install dependencies:
 
 ```powershell
 python -m pip install -r requirements.txt
 ```
 
-The main dependencies are:
+Main dependencies:
 
-* NumPy
-* pandas
-* Matplotlib
-* scikit-learn
-* Plotly
-* Dash
-* PyArrow
+- NumPy
+- pandas
+- Matplotlib
+- scikit-learn
+- Plotly
+- Dash
+- PyArrow
 
-## Preparing the Parquet Dataset
+---
 
-Place the local trip CSV files in:
+## Prepare the Parquet Dataset
+
+The demo CSV files are already included in:
 
 ```text
 data/demo/time_series_jobs/
 ```
 
-Then run:
+Run:
 
 ```powershell
 python src\prepare_parquet.py
 ```
 
-The script creates:
+This creates:
 
 ```text
 data/prepared/trip_features.parquet
 ```
 
-The raw and prepared datasets are ignored by Git.
-
-When a prepared Parquet file is already available, place it directly at the expected path and skip the CSV preparation command.
+---
 
 ## Validate the Prepared Dataset
 
@@ -538,11 +605,13 @@ python src\prepared_data.py
 
 This prints:
 
-* Dataset shape
-* Trip identifiers
-* Default clustering features
-* Available numeric features
-* Sampling coverage for each feature
+- Dataset shape
+- Trip identifiers
+- Default clustering features
+- Available numeric features
+- Sampling coverage
+
+---
 
 ## Run the Clustering Pipeline
 
@@ -552,7 +621,7 @@ Run:
 python src\cluster_time_series_methods.py
 ```
 
-The pipeline creates:
+This generates:
 
 ```text
 data/processed/kmeans_clustered_trip_features.parquet
@@ -562,7 +631,7 @@ outputs/hdbscan_cluster_summary.csv
 outputs/clustering_method_comparison.csv
 ```
 
-Generated outputs are ignored by Git.
+---
 
 ## Generate Static Figures
 
@@ -578,18 +647,16 @@ Generate figures for one trip:
 python src\plot_kmeans_hdbscan_time_series.py --trip 1
 ```
 
-Select a different x-axis:
+Use a different x-axis:
 
 ```powershell
 python src\plot_kmeans_hdbscan_time_series.py --trip 1 --x-axis time
 ```
 
-Select specific features:
+Use specific features:
 
 ```powershell
-python src\plot_kmeans_hdbscan_time_series.py `
-  --trip 1 `
-  --features gx gy gz pipe_rotation
+python src\plot_kmeans_hdbscan_time_series.py --trip 1 --features gx gy gz pipe_rotation
 ```
 
 Figures are saved under:
@@ -597,6 +664,8 @@ Figures are saved under:
 ```text
 outputs/figures/
 ```
+
+---
 
 ## Launch the Dashboard
 
@@ -606,78 +675,50 @@ Run:
 python src\dash_cluster_app.py
 ```
 
-Open:
+Then open:
 
 ```text
 http://127.0.0.1:8050/
 ```
 
-The dashboard initially runs both algorithms using the default features and parameters.
+The dashboard initially runs both clustering methods using the default features and parameters.
 
-The models can then be rerun interactively using different:
+You can then rerun the models interactively using different:
 
-* Model features
-* Cluster counts
-* KMeans convergence settings
-* KMeans outlier thresholds
-* HDBSCAN density settings
-* HDBSCAN distance metrics
-* HDBSCAN cluster-selection settings
-* Displayed regime counts
+- Feature selections
+- KMeans cluster counts
+- KMeans convergence settings
+- KMeans outlier thresholds
+- HDBSCAN density settings
+- HDBSCAN distance metrics
+- HDBSCAN cluster-selection settings
+- Displayed regime counts
 
-## Interpretation
+---
 
-KMeans provides a fixed partition of the eligible observations. Every observation receives a normal cluster label.
+## Real-Time Extension
 
-HDBSCAN identifies stable density-based regimes and preserves a separate anomaly/noise class for observations outside those regimes.
+A possible real-time extension is to use the inferred behavioural regime as an additional processing or control signal.
 
-The clusters are behavioural groupings rather than automatically named engineering states. Their physical meaning should be interpreted using:
+A simplified online workflow would be:
 
-* Feature distributions
-* Sensor trends
-* Trip location
-* Time and depth sequence
-* Operating context
-* Domain knowledge
-
-A cluster label should not be treated as a confirmed physical operating state until it has been reviewed and validated.
-
-## Real-Time Application
-
-The intended real-time extension is to use the inferred behavioural regime as an additional processing or control signal.
-
-A possible online workflow is:
-
-1. Receive the latest sensor observation or time window.
-2. Apply the same feature definitions used during training.
-3. Apply the saved clipping and scaling parameters.
-4. Assign the observation to an operating regime.
-5. Apply regime-specific filtering, thresholds, diagnostics, or control logic.
+1. Receive the latest sensor observation or time window
+2. Apply the same feature definitions used during training
+3. Apply the same clipping and scaling rules
+4. Assign the observation to a regime
+5. Apply regime-specific filtering, diagnostics, or control logic
 
 Potential applications include:
 
-* Smoother filtering in stable regimes
-* Stronger noise suppression in high-vibration regimes
-* Transition-specific control logic
-* Separate handling of anomaly/noise observations
-* Regime-specific thresholds
-* Behaviour-aware downstream models
+- Smoother filtering in stable regimes
+- Stronger suppression in high-vibration regimes
+- Transition-specific logic
+- Separate handling of anomaly/noise rows
+- Regime-aware downstream modelling
 
-The current repository is a proof of concept and does not yet implement a complete production online-inference service.
+This repository is still a proof of concept and does not yet implement a production online inference service.
 
-## Current Example Result
-
-Using the default feature configuration on the prepared four-trip dataset:
-
-```text
-Rows modelled: 50,083
-KMeans displayed clusters: 7
-HDBSCAN normal displayed regimes: 6
-HDBSCAN anomaly/noise rows: 14,539
-HDBSCAN anomaly/noise percentage: 29.03%
-```
-
-These values are dataset- and parameter-dependent and may change when the selected features or hyperparameters change.
+---
 
 ## License
 
