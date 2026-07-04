@@ -509,7 +509,7 @@ The main dependencies are:
 Place the local trip CSV files in:
 
 ```text
-data/raw/time_series_jobs/
+data/demo/time_series_jobs/
 ```
 
 Then run:

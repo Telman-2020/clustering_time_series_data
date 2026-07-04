@@ -13,12 +13,11 @@ env/
 .ipynb_checkpoints/
 
 # Local data - do not upload raw/private data to GitHub
-data/raw/*
+data/raw/
 data/processed/*
 outputs/*
 
 # Keep folder structure
-!data/raw/.gitkeep
 !data/processed/.gitkeep
 !outputs/.gitkeep
 

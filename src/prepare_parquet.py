@@ -7,7 +7,7 @@ import pandas as pd
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
 
-RAW_DATA_DIR = ROOT_DIR / "data" / "raw" / "time_series_jobs"
+SOURCE_DATA_DIR = ROOT_DIR / "data" / "demo" / "time_series_jobs"
 PREPARED_DATA_DIR = ROOT_DIR / "data" / "prepared"
 OUTPUT_PATH = PREPARED_DATA_DIR / "trip_features.parquet"
 
@@ -49,11 +49,11 @@ def load_raw_csv_files() -> pd.DataFrame:
     """
     Load and combine all four trip CSV files.
     """
-    csv_files = sorted(RAW_DATA_DIR.glob("*.csv"))
+    csv_files = sorted(SOURCE_DATA_DIR.glob("*.csv"))
 
     if not csv_files:
         raise FileNotFoundError(
-            f"No CSV files were found in:\n{RAW_DATA_DIR}"
+            f"No CSV files were found in:\n{SOURCE_DATA_DIR}"
         )
 
     frames = []
